@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent_medrag"
+version = "0.1.0"
+description = "Medical document ingestion and retrieval agent (prototype)"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [ { name = "Chuyang Su", email = "cs4570@columbia.edu" } ]
+license = { file = "LICENSE" }
+keywords = [ "nlp", "medical", "pubmed", "RAG" ]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "License :: OSI Approved :: MIT License",
+  "Intended Audience :: Developers",
+]
+
+# Minimal dependency list; add libraries your project requires here.
+dependencies = [
+
+    
+]
+
+[project.urls]
+"Homepage" = "https://github.com/Schuyn/Agent_MedRag"
+
+[tool.setuptools]
+# Tell setuptools where the package source lives (src layout)
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.scripts]
+# Small console entrypoint for local CLI usage; implement `main()` in `agent_medrag.cli`.
+agent-medrag = "agent_medrag.cli:main"
+
+[tool.dependency]
+# Placeholders for dev/test dependencies; not used by build-system but helpful as a note.
+tests = ["pytest>=7.0"]

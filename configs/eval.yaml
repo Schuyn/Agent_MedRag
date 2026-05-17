@@ -1,0 +1,21 @@
+evaluation:
+  qa_path: data/qa/generated_qa_pairs100.json
+  output_dir: reports
+  metrics:
+    - faithfulness
+    - answer_relevancy
+    - context_precision
+    - context_recall
+  sample_size: 100
+
+retrieval:
+  top_k: 15
+
+reranking:
+  enabled: true
+  top_k: 4
+
+llm:
+  provider: openai
+  model: gpt-4o-mini
+  temperature: 0.0
