@@ -3,68 +3,70 @@ Author: Chuyang Su cs4570@columbia.edu
 Date: 2026-05-15 15:46:07
 LastEditTime: 2026-05-20 18:31:08
 FilePath: /Agent_MedRag/src/agent_medrag/schemas.py
-Description: 
-Define the apperance of data
+Description:
+Immutable dataclass schemas that define the shape of data at each pipeline stage —
+from raw PubMed JSON records through normalized documents to retrieval-ready chunks.
 
-From:
+Input  (RawPubMedArticle):
 {
   "article_title": "...",
   "article_abstract": "...",
-  "pub_date": {
-    "year": "2025",
-    "month": "04",
-    "day": "03"
-  }
+  "pub_date": { "year": "2025", "month": "04", "day": "03" }
 }
 
-To:
+Output (MedicalDocument):
 {
   "doc_id": "pubmed_000001",
   "title": "...",
   "text": "...",
-  "metadata": {
-    "source": "pubmed",
-    "pub_date": "2025-04-03",
-    "raw_index": 1
-  }
+  "metadata": { "source": "pubmed", "pub_date": "2025-04-03", "raw_index": 1 }
 }
 '''
 from __future__ import annotations
-# Defer evaluation of type annotations to allow forward references
-# (useful for dataclasses referring to types defined later).
+# PEP 563: all annotations are strings at runtime. This lets us use
+# forward-referenced types inside dataclass field defaults without
+# ImportError, and avoids evaluation overhead for complex type hints.
 
-from dataclasses import asdict, dataclass, field  # dataclass decorator, field() helper, asdict() serializer
+from dataclasses import asdict, dataclass, field
+# Frozen dataclasses keep pipeline data hashable and guard against
+# accidental mutation. asdict() provides the serialization path.
 
-# 'Any' to annotate values that can be of any type (e.g., flexible metadata fields).
 from typing import Any
+# Metadata dicts carry heterogeneous values (str, int, None) so
+# dict[str, Any] is the least-surprising container type.
 
-# Input raw data's schema
+# -- Input schema: raw PubMed article as loaded from JSON ------------------
 @dataclass(frozen=True)
 class RawPubMedArticle:
-  article_title:str  # article title text
-  article_abstract:str  # article abstract text
-  # publication date as a mapping (e.g. {'year':'2025','month':'04','day':'03'})
-  # or None if date is missing. Use Any for flexible value types.
+  article_title:str   # verbatim title from the PubMed record
+  article_abstract:str  # verbatim abstract from the PubMed record
+  # Publication date as a string-keyed mapping (e.g. {'year':'2025','month':'04','day':'03'}).
+  # None when the source record omits pub_date entirely. dict[str, Any] tolerates
+  # values already parsed as int or missing month/day keys.
   pub_date: dict[str, Any] | None = None
-  
-# Output processed data's schema
+
+# -- Output schema: normalized document after ingestion pipeline ----------
 @dataclass(frozen=True)
 class MedicalDocument:
-  doc_id:str
-  title:str
-  text:str    # Transform abtract to text, if future need to extend to full article, can modify this
-  metadata:dict[str,Any]=field(default_factory=dict)  # Contains source, date and raw index, do not directly involved in answering question.
-  
+  doc_id:str     # stable identifier, format: pubmed_{raw_index:06d}
+  title:str      # cleaned article title
+  text:str       # article abstract (or full text once the pipeline is extended past abstracts)
+  # Supplementary fields not consumed by the answer generator — source,
+  # pub_date, and raw_index are carried through for traceability and citation.
+  metadata:dict[str,Any]=field(default_factory=dict)
+
   def to_json_dict(self):
       return asdict(self)
-  
-# Chunked data's schema, which will be used for indexing and retrieval
+
+# -- Chunk schema: retrieval-ready fragments produced by the indexer -------
 @dataclass(frozen=True)
 class MedicalChunk:
-  chunk_id:str
-  doc_id:str
-  text:str
-  metadata:dict[str,Any]=field(default_factory=dict)  # Contains source, date and raw index, do not directly involved in answering question.
-  
+  chunk_id:str    # compound key: {doc_id}_chunk_{seq:03d}
+  doc_id:str      # back-pointer to the parent MedicalDocument
+  text:str        # sliced window of the parent document's text field
+  # Inherits parent document metadata plus chunk-specific bookkeeping
+  # (chunk_index, chunk_start, chunk_end, title).
+  metadata:dict[str,Any]=field(default_factory=dict)
+
   def to_json_dict(self):
       return asdict(self)

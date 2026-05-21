@@ -33,81 +33,77 @@ LOW_VALUE_TITLE_PREFIXES = (
 )
 
 def is_low_value_record(title:str,abstract:str)->bool:
+    """Flag corrigenda, errata, retractions, and other non-content PubMed notices."""
     normalized_title=title.strip().lower().rstrip('.')
     normalized_abstract=abstract.strip().lower()
-    
+
     if normalized_title in LOW_VALUE_TITLE_PREFIXES:
         return True
-    
+
+    # Catch auto-generated correction notices (e.g. "[This corrects the article DOI: ...]").
     if normalized_abstract.startswith("[this corrects the article doi:"):
         return True
-    
+
     if 'retracted' in normalized_title or 'retracted' in normalized_abstract:
         return True
-    
+
     return False
 
 def format_pub_date(pub_date:dict[str,Any] | None)->str | None:
-    # If pub_date is not a dict, we cannot format it.
+    """Normalize a PubMed pub_date dict into an ISO-like 'YYYY-MM-DD' string."""
     if not isinstance(pub_date,dict):
         return None
 
-    # Extract possible year/month/day components (may be missing).
     year=pub_date.get('year')
     month=pub_date.get('month')
     day=pub_date.get('day')
 
-    # Year is required for a valid date; otherwise return None.
+    # Year is required; month/day default to '01' when absent.
     if not year:
         return None
 
-    # Normalize numeric parts and provide defaults for month/day when missing.
     year_text=str(year).zfill(4)
     month_text=str(month).zfill(2) if month else '01'
     day_text=str(day).zfill(2) if day else '01'
 
-    # Return ISO-like date string YYYY-MM-DD.
     return f'{year_text}-{month_text}-{day_text}'
     
 def normalize_pubmed_record(
     record:dict[str,Any],
     raw_index:int,
 )->MedicalDocument | None:
-    # Pull fields from the raw record, using empty strings as fallbacks.
+    """Convert one raw PubMed dict into a MedicalDocument, or return None if filtered out."""
     title=record.get('article_title','')
     abstract=record.get('article_abstract','')
     pub_date=record.get('pub_date')
 
-    # Ensure title/abstract are strings and strip surrounding whitespace.
     title=title.strip() if isinstance(title,str) else ''
     abstract=abstract.strip() if isinstance(abstract,str) else ''
 
-    # Skip records missing essential text fields.
+    # Drop records with missing text fields.
     if not title or not abstract:
         return None
-    
+
     if is_low_value_record(title,abstract):
         return None
 
-    # Build and return a MedicalDocument dataclass instance.
     return MedicalDocument(
         doc_id=f'pubmed_{raw_index:06d}',
         title=title,
         text=abstract,
         metadata={
-            # Source identifier to allow multi-source ingestion later.
-            'source':'pubmed',  
-            # Normalized publication date (or None).
+            'source':'pubmed',
+            # source allows multi-source ingestion (e.g. ArXiv, clinical trials) later.
             'pub_date':format_pub_date(pub_date),
-            # Original index in the raw list for traceability.
-            'raw_index':raw_index, 
+            # raw_index preserves position in the original JSON array for traceability.
+            'raw_index':raw_index,
         },
     )
     
 def normalize_pubmed_records(
     records:list[dict[str,Any]],
 )->list[MedicalDocument]:
-    # Normalize a list of raw records into MedicalDocument instances.
+    """Normalize a batch of raw PubMed records, silently dropping any that fail filtering."""
     documents:list[MedicalDocument]=[]
 
     for raw_index,record in enumerate(records):

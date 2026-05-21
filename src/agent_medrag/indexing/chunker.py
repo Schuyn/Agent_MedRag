@@ -6,16 +6,23 @@ FilePath: /Agent_MedRag/src/agent_medrag/indexing/chunker.py
 Description: 
 This module defines the chunking logic for processing medical documents. It takes in raw medical documents, processes them (e.g., splitting abstracts into smaller chunks), and prepares them for indexing and retrieval. 
 '''
-from __future__ import annotations  # Defer evaluation of type annotations to allow forward references
+from __future__ import annotations
+# PEP 563: string annotations at runtime — avoids ImportError when
+# dataclass field types reference classes defined later in the module.
 
-from agent_medrag.schemas import MedicalDocument, MedicalChunk  # Import the MedicalDocument and MedicalChunk schemas defined in schemas.py
+from agent_medrag.schemas import MedicalDocument, MedicalChunk
+# Pipeline data classes consumed (MedicalDocument input) and produced
+# (MedicalChunk output) by the chunking functions below.
 
 def chunk_document(
     document:MedicalDocument,
-    chunk_size:int=1000,  # Default chunk size (number of characters)
-    chunk_overlap:int=150  # Default overlap size (number of characters)
+    chunk_size:int=1000,
+    # 1000 chars ≈ 200-250 tokens — balances semantic completeness with retrieval precision.
+    chunk_overlap:int=150
+    # 15% overlap preserves cross-boundary context; large enough for sentence-level continuity,
+    # small enough to avoid near-duplicate chunks.
 )->list[MedicalChunk]:
-    # Validate input parameters
+    """Split a single MedicalDocument into overlapping text windows."""
     if chunk_size<=0:
         raise ValueError("chunk_size must be a positive integer.")
     
@@ -31,7 +38,7 @@ def chunk_document(
     chunk_index=0
     
     while start<len(text):
-        end=min(start+chunk_size,len(text)) # In case of out of range
+        end=min(start+chunk_size,len(text))  # clamp to prevent overshoot on final window
         chunk_text=text[start:end].strip()
         
         if chunk_text:
@@ -63,7 +70,7 @@ def chunk_documents(
     chunk_size:int=1000,
     chunk_overlap:int=150,
 )->list[MedicalChunk]:
-    
+    """Split a batch of MedicalDocuments into overlapping chunks (list-flattened)."""
     chunks:list[MedicalChunk]=[]
     
     for document in documents:

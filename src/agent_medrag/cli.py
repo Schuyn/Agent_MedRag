@@ -3,8 +3,12 @@ Author: Chuyang Su cs4570@columbia.edu
 Date: 2026-05-15 15:40:31
 LastEditTime: 2026-05-20 19:17:57
 FilePath: /Agent_MedRag/src/agent_medrag/cli.py
-Description: 
-Main script of my agent.
+Description:
+CLI entry point for Agent_MedRag. Exposes subcommands for the full pipeline —
+ingest (normalize raw PubMed JSON to documents.jsonl), chunk (split documents
+into retrieval-ready chunks), ask (single-question RAG query), evaluate (batch
+RAGAS benchmark), and serve (FastAPI/Streamlit UI). Each subcommand maps to
+a dedicated handler below.
 '''
 from __future__ import annotations
 
@@ -21,29 +25,30 @@ def write_documents_jsonl(
     documents:list[MedicalDocument],
     output_path:str | Path,
 )->None:
+    """Serialize each MedicalDocument as a single-line JSON record (JSONL, UTF-8)."""
     output_path=Path(output_path)
     output_path.parent.mkdir(parents=True,exist_ok=True)
-    
+
     with output_path.open('w',encoding='utf-8') as file:
         for document in documents:
             json_line=json.dumps(document.to_json_dict(),ensure_ascii=False)
             file.write(json_line+'\n')
-    # Each MedicalDocument is serialized to a single-line JSON and written to the output file (UTF-8).
 
 def run_ingest(
     input_path:str | Path,
     output_path:str | Path,
 )->None:
+    """Load raw PubMed JSON, normalize into MedicalDocument instances, and write JSONL output."""
     raw_records=load_pubmed_json(input_path)
     documents=normalize_pubmed_records(raw_records)
-    
+
     write_documents_jsonl(documents,output_path)
-    
+
     print(f'Loaded {len(raw_records)} raw records from {input_path}')
     print(f"Ingestion complete. Processed {len(documents)} documents. Output written to {output_path}")
-    # Load raw PubMed JSON, normalize into a list of MedicalDocument objects, and write to JSONL output.
          
 def load_documents_jsonl(path:str | Path)->list[MedicalDocument]:
+    """Read a documents.jsonl file back into MedicalDocument instances."""
     documents:list[MedicalDocument]=[]
     
     with Path(path).open('r',encoding='utf-8') as file:
@@ -64,6 +69,7 @@ def load_documents_jsonl(path:str | Path)->list[MedicalDocument]:
     return documents    
 
 def write_chunks_jsonl(chunks:list[MedicalChunk],output_path:str | Path)->None:
+    """Serialize each MedicalChunk as a single-line JSON record (JSONL, UTF-8)."""
     output_path=Path(output_path)
     output_path.parent.mkdir(parents=True,exist_ok=True)
     
@@ -78,6 +84,7 @@ def run_chunk(
     chunk_size:int,
     chunk_overlap:int,
 )->None:
+    """Load normalized documents, split into overlapping chunks, and write chunks.jsonl."""
     documents=load_documents_jsonl(input_path)
     chunks=chunk_documents(
         documents=documents,
@@ -155,15 +162,16 @@ def build_parser()->argparse.ArgumentParser:
     )
     
     return parser
-    # Return configured argparse parser: currently supports the 'ingest' subcommand.
+    # Return configured argparse parser. Subcommands: ingest, chunk.
 
 
 
 
 def main()->None:
+    """Parse CLI arguments and dispatch to the matching subcommand handler."""
     parser=build_parser()
     args=parser.parse_args()
-    
+
     if args.command=='ingest':
         run_ingest(args.input,args.output)
     elif args.command=='chunk':
@@ -175,7 +183,6 @@ def main()->None:
         )
     else:
         print(f"Unknown command: {args.command}")
-    # CLI entry point: parse arguments and dispatch to the corresponding subcommand handler.
         
 if __name__=='__main__':
     main()
