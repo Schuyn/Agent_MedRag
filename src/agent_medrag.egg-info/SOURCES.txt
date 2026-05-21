@@ -10,6 +10,9 @@ src/agent_medrag.egg-info/SOURCES.txt
 src/agent_medrag.egg-info/dependency_links.txt
 src/agent_medrag.egg-info/entry_points.txt
 src/agent_medrag.egg-info/top_level.txt
+src/agent_medrag/indexing/__init__.py
+src/agent_medrag/indexing/chunker.py
 src/agent_medrag/ingestion/__init__.py
 src/agent_medrag/ingestion/document_normalizer.py
 src/agent_medrag/ingestion/json_loader.py
+src/agent_medrag/ingestion/pubmed_client.py
