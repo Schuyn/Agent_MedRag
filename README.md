@@ -8,14 +8,16 @@ A medical literature question-answering agent built on PubMed abstracts with ret
 
 **Stage 1 (complete):** Project structure, ingestion pipeline, document normalization, chunking, and CLI foundation.
 
+**Stage 2 (in progress):** BGE embeddings and persistent Chroma index construction are implemented; reproducible validation is still pending.
+
 | Module | Status |
 |---|---|
 | `ingestion/` — JSON loader, document normalizer, PubMed client stub | Done |
-| `indexing/` — Sliding-window chunker with configurable overlap | Done |
+| `indexing/` — Chunker, BGE embeddings, Chroma store, index builder | Implemented |
 | `schemas.py` — `RawPubMedArticle`, `MedicalDocument`, `MedicalChunk` | Done |
 | `config.py` + `configs/default.yaml` — Centralized configuration | Done |
-| `cli.py` — `medrag ingest` subcommand | Done |
-| Retrieval / embedding / vector store | Planned |
+| `cli.py` — `ingest`, `chunk`, and `build-index` subcommands | Implemented |
+| Retrieval / embedding / vector store | Index build implemented; retrieval planned |
 | Reranking (BGE) | Planned |
 | LLM generation with citations | Planned |
 | Medical safety guardrails | Planned |
@@ -49,6 +51,9 @@ Agent_MedRag/
     indexing/
       __init__.py
       chunker.py          # Sliding-window text chunking
+      embeddings.py       # Sentence-transformers embedding backend
+      vector_store.py     # Persistent Chroma collection wrapper
+      index_builder.py    # Batch index construction from chunks
   scripts/
     ingested_pubmed.py    # Standalone ingestion script (stub)
   notebooks/
@@ -74,6 +79,30 @@ agent-medrag ingest --input data/raw/pubmed_article.json --output data/processed
 ```
 
 This loads raw PubMed JSON, normalizes each article into a `MedicalDocument`, and writes the result as JSONL.
+
+### Chunk normalized documents
+
+```bash
+agent-medrag chunk --input data/processed/documents.jsonl --output data/processed/chunks.jsonl --chunk-size 512 --chunk-overlap 80
+```
+
+This creates retrieval-sized chunks while preserving their parent document metadata.
+
+### Build the vector index
+
+```bash
+agent-medrag build-index --input data/processed/chunks.jsonl --index indexes/chroma --collection pubmed_articles --model BAAI/bge-small-en-v1.5
+```
+
+This embeds each chunk and persists a Chroma collection under `indexes/chroma`.
+
+After changing chunking settings or the embedding model, rebuild the target collection so stale chunks are not retained:
+
+```bash
+agent-medrag build-index --input data/processed/chunks.jsonl --index indexes/chroma --collection pubmed_articles --model BAAI/bge-small-en-v1.5 --rebuild
+```
+
+`--rebuild` removes and recreates only the selected collection before indexing. It does not remove other index directories or experiment collections.
 
 ### Configuration
 

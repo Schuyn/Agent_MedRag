@@ -1,2 +1,0 @@
-[console_scripts]
-agent-medrag = agent_medrag.cli:main

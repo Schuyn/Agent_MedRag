@@ -1,7 +1,7 @@
 '''
 Author: Chuyang Su cs4570@columbia.edu
 Date: 2026-05-24 19:34:44
-LastEditTime: 2026-05-24 20:03:26
+LastEditTime: 2026-05-25 18:18:01
 FilePath: /Agent_MedRag/src/agent_medrag/indexing/vector_store.py
 Description: 
 This module uses Chroma as the project's vector store for the following reasons:
@@ -58,6 +58,7 @@ class ChromaVectorStore:
     )->None:
         self.persist_directory=Path(persist_directory)
         self.persist_directory.mkdir(parents=True,exist_ok=True)
+        self.collection_name = str(collection_name)
         
         self.client=chromadb.PersistentClient(
             path=str(self.persist_directory)
@@ -108,6 +109,13 @@ class ChromaVectorStore:
             include=["documents","metadatas","distances"],
         )
         
+    def reset_collection(self)->None:
+        # Rebuild collection
+        self.client.delete_collection(name=self.collection_name)
+        self.collection=self.client.get_or_create_collection(
+            name=self.collection_name
+        )
+
     @staticmethod
     def _build_metadata(chunk:MedicalChunk)->dict[str,Any]:
         metadata={

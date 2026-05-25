@@ -1,1 +1,7 @@
+__pycache__/
+*.pyc
 
+# setuptools / packaging metadata
+*.egg-info/
+*.egg-info
+/indexes
