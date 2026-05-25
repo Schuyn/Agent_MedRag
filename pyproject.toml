@@ -21,7 +21,7 @@ classifiers = [
 # Minimal dependency list; add libraries your project requires here.
 dependencies = [
   "sentence-transformers>=2.7.0",
-    
+  "chromadb>=1.0.0",
 ]
 
 [project.urls]
