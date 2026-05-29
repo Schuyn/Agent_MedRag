@@ -2,22 +2,33 @@
 
 A medical literature question-answering agent built on PubMed abstracts with retrieval-augmented generation, reranking, citation verification, and reproducible RAG evaluation.
 
-**Intended for medical literature exploration and educational use — not for diagnosis or personalized medical advice.**
+**Intended for medical literature exploration and educational use, not for diagnosis or personalized medical advice.**
 
 ## Project Status
 
 **Stage 1 (complete):** Project structure, ingestion pipeline, document normalization, chunking, and CLI foundation.
 
-**Stage 2 (in progress):** BGE embeddings and persistent Chroma index construction are implemented; reproducible validation is still pending.
+**Stage 2 (complete):** Config-driven chunking and Chroma index construction are implemented and validated locally.
+
+Validation result:
+
+```text
+Loaded 6459 chunks from data/processed/chunks.jsonl
+Indexed 6459 chunks
+Vector store contains 6459 records
+Index written to indexes/chroma
+```
+
+**Stage 3 (next):** Baseline RAG retrieval and `ask` command.
 
 | Module | Status |
 |---|---|
-| `ingestion/` — JSON loader, document normalizer, PubMed client stub | Done |
-| `indexing/` — Chunker, BGE embeddings, Chroma store, index builder | Implemented |
-| `schemas.py` — `RawPubMedArticle`, `MedicalDocument`, `MedicalChunk` | Done |
-| `config.py` + `configs/default.yaml` — Centralized configuration | Done |
-| `cli.py` — `ingest`, `chunk`, and `build-index` subcommands | Implemented |
-| Retrieval / embedding / vector store | Index build implemented; retrieval planned |
+| `ingestion/` - JSON loader, document normalizer, PubMed client stub | Done |
+| `indexing/` - Chunker, BGE embeddings, Chroma store, index builder | Done |
+| `config.py` + `configs/default.yaml` - Centralized Stage 2 configuration | Done |
+| `cli.py` - `ingest`, `chunk`, and `build-index` subcommands | Done |
+| Retrieval from local Chroma index | Next |
+| Baseline `ask` command | Next |
 | Reranking (BGE) | Planned |
 | LLM generation with citations | Planned |
 | Medical safety guardrails | Planned |
@@ -28,7 +39,7 @@ See [docs/PROJECT_REFACTOR_PLAN.md](docs/PROJECT_REFACTOR_PLAN.md) for the full 
 
 ## Project Structure
 
-```
+```text
 Agent_MedRag/
   pyproject.toml
   configs/
@@ -58,7 +69,7 @@ Agent_MedRag/
     ingested_pubmed.py    # Standalone ingestion script (stub)
   notebooks/
     legacy/               # Original course project notebooks
-    demos/                 # Runnable demo notebooks
+    demos/                # Runnable demo notebooks
   docs/
     PROJECT_REFACTOR_PLAN.md
     PORTFOLIO_DEVELOPMENT_PLAN.md
@@ -72,37 +83,39 @@ Agent_MedRag/
 pip install -e .
 ```
 
-### Ingest PubMed data
+### Ingest PubMed Data
 
 ```bash
-agent-medrag ingest --input data/raw/pubmed_article.json --output data/processed/documents.jsonl
+agent-medrag ingest --config configs/default.yaml
 ```
 
-This loads raw PubMed JSON, normalizes each article into a `MedicalDocument`, and writes the result as JSONL.
+This reads `data.raw_pubmed_path`, normalizes PubMed records into `MedicalDocument` objects, and writes `data.processed_documents_path`.
 
-### Chunk normalized documents
+### Chunk Normalized Documents
 
 ```bash
-agent-medrag chunk --input data/processed/documents.jsonl --output data/processed/chunks.jsonl --chunk-size 512 --chunk-overlap 80
+agent-medrag chunk --config configs/default.yaml
 ```
 
-This creates retrieval-sized chunks while preserving their parent document metadata.
+This reads `data.processed_documents_path`, writes `data.chunks_path`, and uses `chunking.chunk_size` plus `chunking.chunk_overlap`.
 
-### Build the vector index
+### Build The Vector Index
 
 ```bash
-agent-medrag build-index --input data/processed/chunks.jsonl --index indexes/chroma --collection pubmed_articles --model BAAI/bge-small-en-v1.5
+agent-medrag build-index --config configs/default.yaml --rebuild
 ```
 
-This embeds each chunk and persists a Chroma collection under `indexes/chroma`.
+This reads `data.chunks_path`, embeds chunks with `embedding.model_name`, and persists the configured Chroma collection under `vector_store.persist_dir`.
 
-After changing chunking settings or the embedding model, rebuild the target collection so stale chunks are not retained:
+Use `--rebuild` when chunking settings or the embedding model changes. It resets only the selected Chroma collection before indexing, so stale chunks are not retained.
+
+CLI flags can override config values when needed:
 
 ```bash
-agent-medrag build-index --input data/processed/chunks.jsonl --index indexes/chroma --collection pubmed_articles --model BAAI/bge-small-en-v1.5 --rebuild
+agent-medrag build-index --config configs/default.yaml --model BAAI/bge-large-en-v1.5 --device cuda --rebuild
 ```
 
-`--rebuild` removes and recreates only the selected collection before indexing. It does not remove other index directories or experiment collections.
+Generated Chroma indexes under `indexes/` are local build artifacts and are not committed to Git. Rebuild them with `agent-medrag build-index --config configs/default.yaml --rebuild`.
 
 ### Configuration
 
@@ -112,18 +125,39 @@ Copy and edit the relevant config file:
 cp configs/default.yaml configs/local.yaml
 ```
 
-Key settings in `configs/default.yaml`:
+Stage 2 currently uses these sections from `configs/default.yaml`:
 
 | Section | Purpose |
 |---|---|
-| `data` | Paths to raw/processed/chunks files |
-| `chunking` | Chunk size, overlap, minimum chars |
-| `embedding` | HuggingFace model selection (BGE) |
-| `vector_store` | Chroma persist directory and collection |
-| `retrieval` | Top-k, score threshold |
-| `reranking` | BGE reranker model and top-k |
-| `llm` | Provider (OpenAI), model, temperature |
-| `safety` | Medical disclaimer and guardrail toggles |
+| `data` | Paths to raw documents, normalized documents, and chunks |
+| `chunking` | Chunk size, overlap, and minimum chunk length |
+| `embedding` | HuggingFace model, device, batch size, and normalization |
+| `vector_store` | Chroma persist directory and collection name |
+
+## Next Stage: Baseline RAG Ask
+
+Stage 3 will turn the local Chroma index into a usable RAG question-answering path.
+
+Planned work:
+
+- Load the persisted Chroma collection.
+- Embed the user question with the same embedding backend used for indexing.
+- Retrieve top-k chunks from the local index.
+- Convert raw Chroma results into structured evidence records.
+- Add the first `agent-medrag ask` command.
+- Generate an answer grounded in retrieved evidence.
+
+Initial target command:
+
+```bash
+agent-medrag ask "How does sonodynamic therapy differ from conventional antibiotics?"
+```
+
+Stage 3 acceptance criteria:
+
+- The system retrieves evidence from the local Chroma index.
+- Retrieved chunks include `chunk_id`, `doc_id`, title, text, and retrieval score.
+- The `ask` command returns a grounded answer or clearly reports insufficient evidence.
 
 ### Environment
 
@@ -137,7 +171,7 @@ cp .env.example .env
 
 ## Data Schema
 
-### Input (raw PubMed JSON)
+### Input (Raw PubMed JSON)
 
 ```json
 {
@@ -147,7 +181,7 @@ cp .env.example .env
 }
 ```
 
-### Output (normalized document)
+### Output (Normalized Document)
 
 ```json
 {
@@ -170,8 +204,8 @@ This system is a **medical literature assistant**. It does not:
 - Recommend personal treatments or drug dosages
 - Replace a qualified clinician
 
-All answers include a safety disclaimer. For details, see the safety design in [docs/PROJECT_REFACTOR_PLAN.md](docs/PROJECT_REFACTOR_PLAN.md#11-医学安全设计).
+All answers include a safety disclaimer. For details, see the safety design in [docs/PROJECT_REFACTOR_PLAN.md](docs/PROJECT_REFACTOR_PLAN.md).
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT - see [LICENSE](LICENSE).

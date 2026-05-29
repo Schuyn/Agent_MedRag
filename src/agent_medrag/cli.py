@@ -1,14 +1,14 @@
 '''
 Author: Chuyang Su cs4570@columbia.edu
 Date: 2026-05-15 15:40:31
-LastEditTime: 2026-05-25 18:25:45
+LastEditTime: 2026-05-29 15:44:41
 FilePath: /Agent_MedRag/src/agent_medrag/cli.py
 Description:
-CLI entry point for Agent_MedRag. Exposes subcommands for the full pipeline —
+CLI entry point for Agent_MedRag. Exposes subcommands for the data pipeline —
 ingest (normalize raw PubMed JSON to documents.jsonl), chunk (split documents
-into retrieval-ready chunks), ask (single-question RAG query), evaluate (batch
-RAGAS benchmark), and serve (FastAPI/Streamlit UI). Each subcommand maps to
-a dedicated handler below.
+into retrieval-ready chunks with configurable overlap), and build-index (embed
+chunks and persist in Chroma vector store). Each subcommand maps to a dedicated
+handler below.
 '''
 from __future__ import annotations
 
@@ -29,6 +29,12 @@ from agent_medrag.indexing.vector_store import (
     ChromaVectorStore,
 )
 from agent_medrag.indexing.index_builder import build_index,load_chunks_jsonl
+from agent_medrag.config import (
+    DAFAULT_CONFIG_PATH,
+    get_config_value,
+    load_config,
+    resolve_device,
+)
 from agent_medrag.schemas import MedicalDocument,MedicalChunk
 
 def write_documents_jsonl(
@@ -121,7 +127,7 @@ def run_build_index(
 
     embedding_model=SentenceTransformerEmbedding(
         model_name=model_name,
-        normalize_embeddings=True,
+        normalize_embeddings=True,  # Currently we fix the normalization
         device=device,
     )
 
@@ -147,26 +153,15 @@ def run_build_index(
     print(f"Index written to {persist_directory}")
 
 def build_parser()->argparse.ArgumentParser:
-    """Create and return a configured ArgumentParser for the CLI.
+    """
+    Create and return a configured ArgumentParser for the CLI.
 
-    Using a command-line argument parser (e.g. argparse or click) is preferred
-    over interactive prompts input() for tools intended to be used in
-    automation and production environments. Benefits include:
-
-    - Non-interactive operation: can run in CI, cron jobs, containers, and
-        other automated pipelines without human interaction.
-    - Composability: supports flags, options and subcommands; integrates well
-        with shell pipelines and scripting.
-    - Self-documenting help: automatically generates `--help` output for users.
-    - Type validation and defaults: argument types (int/float/path) and default
-        values are enforced by the parser.
-    - Testability: CLI behavior can be tested by supplying argv; avoids
-        mocking stdin used by `input()`.
-    - Maintainability: adding new options is backward-compatible and clearer
-        than changing an interactive flow.
+    Configures subparsers for ingest, chunk, and build-index commands. Each 
+    subcommand supports --config to load YAML configuration, with CLI arguments 
+    taking precedence over config file values.
 
     Returns:
-            argparse.ArgumentParser: parser configured with the available subcommands.
+        argparse.ArgumentParser: parser configured with the available subcommands.
     """
     parser=argparse.ArgumentParser(
         prog='medrag',
@@ -184,16 +179,23 @@ def build_parser()->argparse.ArgumentParser:
     )
     
     ingest_parser.add_argument(
+        "--config",
+        type=str,
+        default=DAFAULT_CONFIG_PATH,
+        help="Path to the YAML config file.",
+    )
+    
+    ingest_parser.add_argument(
         '--input',
         type=str,
-        required=True,
+        default=None,
         help='Path to the input JSON file containing raw PubMed records.'
     )
     
     ingest_parser.add_argument(
         '--output',
         type=str,
-        required=True,
+        default=None,
         help='Path to the output JSONL file where normalized documents will be written.'
     )
     
@@ -203,30 +205,37 @@ def build_parser()->argparse.ArgumentParser:
     )
     
     chunk_parser.add_argument(
+        "--config",
+        type=str,
+        default=DAFAULT_CONFIG_PATH,
+        help="Path to the YAML config file.",
+    )
+    
+    chunk_parser.add_argument(
         "--input",
         type=str,
-        required=True,
+        default=None,
         help="Path to the input documents.jsonl file.",
     )
     
     chunk_parser.add_argument(
         "--output",
         type=str,
-        required=True,
+        default=None,
         help="Path to the out chunks.jsonl file.",
     )
     
     chunk_parser.add_argument(
         "--chunk-size",
         type=int,
-        default=1000,
+        default=None,
         help="Maximum number of characters per chunk.",
     )
     
     chunk_parser.add_argument(
         "--chunk-overlap",
         type=int,
-        default=150,
+        default=None,
         help="Number of overlapping characters between adjacent chunks.",
     )
     
@@ -236,23 +245,30 @@ def build_parser()->argparse.ArgumentParser:
     )
 
     build_index_parser.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        help="Path to the YAML config file.",
+    )
+    
+    build_index_parser.add_argument(
         "--input",
         type=str,
-        required=True,
+        default=None,
         help="Path to the input chunks.jsonl file.",
     )
 
     build_index_parser.add_argument(
         "--index",
         type=str,
-        default=DEFAULT_PERSIST_DIRECTORY,
+        default=None,
         help="Directory where the persistent Chroma index will be stored.",
     )
 
     build_index_parser.add_argument(
         "--collection",
         type=str,
-        default=DEFAULT_COLLECTION_NAME,
+        default=None,
         help="Name of the Chroma collection.",
     )
 
@@ -268,14 +284,14 @@ def build_parser()->argparse.ArgumentParser:
     build_index_parser.add_argument(
         "--model",
         type=str,
-        default=DEFAULT_EMBEDDING_MODEL,
+        default=None,
         help="Sentence-transformers embedding model name.",
     )
 
     build_index_parser.add_argument(
         "--batch-size",
         type=int,
-        default=64,
+        default=None,
         help="Number of chunks embedded and written per batch.",
     )
 
@@ -287,32 +303,106 @@ def build_parser()->argparse.ArgumentParser:
     )
 
     return parser
-    # Return configured argparse parser. Subcommands: ingest, chunk.
 
 def main()->None:
     """Parse CLI arguments and dispatch to the matching subcommand handler."""
     parser=build_parser()
     args=parser.parse_args()
-
+    config=load_config(args.config)
+    
     if args.command=='ingest':
-        run_ingest(args.input,args.output)
+        input_path=args.input or get_config_value(
+            config,
+            "data",
+            "raw_pubmed_path",
+            "data/raw/pubmed_article.json",
+        )
+        output_path=args.output or get_config_value(
+            config,
+            "data",
+            "processed_documents_path",
+            "data/processed/documents.jsonl",
+        )
+        run_ingest(input_path,output_path)
 
     elif args.command=='chunk':
+        input_path=args.input or get_config_value(
+            config,
+            "data",
+            "processed_documents_path",
+            "data/processed/documents.jsonl",
+        )
+        output_path=args.output or get_config_value(
+            config,
+            "data",
+            "chunks_path",
+            "data/processed/chunks.jsonl",
+        )
+        chunk_size=args.chunk_size or get_config_value(
+            config,
+            "chunking",
+            "chunk_size",
+            1000,
+        )
+        chunk_overlap=args.chunk_size or get_config_value(
+            config,
+            "chunking",
+            "chunk_overlap",
+            150,
+        )
         run_chunk(
-            input_path=args.input,
-            output_path=args.output,
-            chunk_size=args.chunk_size,
-            chunk_overlap=args.chunk_overlap,
+            input_path,
+            output_path,
+            chunk_size,
+            chunk_overlap,
         )
 
     elif args.command=='build-index':
+        input_path=args.input or get_config_value(
+            config,
+            "data",
+            "chunks_path",
+            "data/processed/chunks.jsonl",
+        )
+        persist_directory=args.index or get_config_value(
+            config,
+            "vector_store",
+            "persist_dir",
+            DEFAULT_PERSIST_DIRECTORY
+        )
+        collection_name=args.collection or get_config_value(
+            config,
+            "vector_store",
+            "collection_name",
+            DEFAULT_COLLECTION_NAME,
+        )
+        model_name=args.model or get_config_value(
+            config,
+            "embedding",
+            "model_name",
+            DEFAULT_EMBEDDING_MODEL,
+        )
+        batch_size=args.batch_size or get_config_value(
+            config,
+            "embedding",
+            "batch_size",
+            64,
+        )
+        device=resolve_device(
+            args.device or get_config_value(
+                config,
+                "embedding",
+                "device",
+                None
+            )
+        )
         run_build_index(
-            input_path=args.input,
-            persist_directory=args.index,
-            collection_name=args.collection,
-            model_name=args.model,
-            batch_size=args.batch_size,
-            device=args.device,
+            input_path,
+            persist_directory,
+            collection_name,
+            model_name,
+            batch_size,
+            device,
             rebuild=args.rebuild,
         )
 
