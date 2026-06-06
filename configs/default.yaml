@@ -31,10 +31,12 @@ reranking:
   top_k: 4
 
 llm:
-  provider: openai
-  model: gpt-4o-mini
+  provider: deepseek
+  model: deepseek-v4-pro
   temperature: 0.1
   max_output_tokens: 800
+  thinking_enabled: false
+  reasoning_effort: high
 
 safety:
   medical_disclaimer: true

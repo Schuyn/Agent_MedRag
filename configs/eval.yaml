@@ -14,8 +14,3 @@ retrieval:
 reranking:
   enabled: true
   top_k: 4
-
-llm:
-  provider: openai
-  model: gpt-4o-mini
-  temperature: 0.0
