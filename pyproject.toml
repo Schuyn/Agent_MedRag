@@ -20,6 +20,9 @@ classifiers = [
 
 # Minimal dependency list; add libraries your project requires here.
 dependencies = [
+  "Python>=3.10",
+  "PyTorch>=2.12.0",
+  "CUDA>=13.2",
   "sentence-transformers>=2.7.0",
   "chromadb>=1.0.0",
   "PyYAML>=6.0.3",
