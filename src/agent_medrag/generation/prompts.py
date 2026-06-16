@@ -111,6 +111,9 @@ Question:
 Evidence:
 {evidence_context}
 
+Allowed evidence IDs:
+{allowed_ids_text}
+
 Return this JSON structure:
 {{
   "answer": "Evidence-grounded answer with citations using allowed IDs like [E1] or [E2].",
