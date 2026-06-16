@@ -79,7 +79,7 @@ Implementation:
 
 - Implement retriever.
 - Implement LLM provider abstraction.
-- Use OpenAI as the first default provider to reduce local environment complexity.
+- Use DeepSeek as the first default provider to reduce local environment complexity.
 - Implement answer generation.
 - Return structured output with:
   - `answer`
