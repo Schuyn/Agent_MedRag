@@ -10,8 +10,10 @@ from agent_medrag.generation.llm_provider import (
     LLMProvider,
     DeepSeekProvider,
 )
+from agent_medrag.generation.answer_generator import AnswerGenerator
 
 __all__ = [
+    "AnswerGenerator",
     "LLMProvider",
     "DeepSeekProvider",
 ]
