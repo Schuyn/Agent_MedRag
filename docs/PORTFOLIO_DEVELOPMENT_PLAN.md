@@ -81,12 +81,13 @@ Implementation:
 - Implement LLM provider abstraction.
 - Use DeepSeek as the first default provider to reduce local environment complexity.
 - Implement answer generation.
+- Implement a lightweight `rag_pipeline.py` orchestration layer that loads config and wires the embedding model, Chroma vector store, retriever, LLM provider, and answer generator.
 - Return structured output with:
   - `answer`
   - `citations`
   - `limitations`
   - `safety_note`
-- Add the ask command:
+- Add a thin ask command that delegates to the pipeline:
 
 ```bash
 medrag ask "How does sonodynamic therapy differ from conventional antibiotics?"
@@ -94,9 +95,11 @@ medrag ask "How does sonodynamic therapy differ from conventional antibiotics?"
 
 Acceptance criteria:
 
+- The reusable pipeline can run retrieve -> answer before CLI wiring.
 - The system retrieves evidence from the local index.
 - The generated answer is grounded in retrieved evidence.
 - The answer includes citation information.
+- `medrag ask` delegates to the same pipeline instead of duplicating assembly logic.
 - If evidence is missing, the system clearly states that evidence is insufficient.
 
 ## Phase 4: Reranker, Citation Quality, and Safety

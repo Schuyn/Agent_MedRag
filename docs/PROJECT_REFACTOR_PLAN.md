@@ -319,6 +319,7 @@ GR5293-AgentMedRag/
       __init__.py
       config.py
       schemas.py
+      rag_pipeline.py
       logging.py
       ingestion/
         __init__.py
@@ -1115,7 +1116,8 @@ medrag serve --host 127.0.0.1 --port 8000
 
 作用：
 
-- 对单个问题运行完整 Agent。
+- 对单个问题运行固定 baseline RAG chain。
+- 通过 `rag_pipeline.py` 复用检索和生成的组装逻辑，CLI 只负责参数解析和输出。
 - 输出结构化答案。
 
 示例：
@@ -1357,7 +1359,8 @@ medrag build-index
 3. 实现 `llm_provider.py`。
 4. 实现 `answer_generator.py`。
 5. 实现 `prompts.py`。
-6. 实现 `medrag ask`。
+6. 实现 `rag_pipeline.py`，将 config、embedding model、vector store、retriever、LLM provider 和 answer generator 组装为固定 baseline RAG chain。
+7. 实现 `medrag ask`，CLI 只负责参数解析并调用 pipeline。
 
 验收：
 
