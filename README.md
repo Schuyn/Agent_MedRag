@@ -19,19 +19,21 @@ Vector store contains 6459 records
 Index written to indexes/chroma
 ```
 
-**Stage 3 (next):** Baseline RAG retrieval and `ask` command.
+**Stage 3 (complete):** Baseline RAG retrieval, DeepSeek-backed answer generation, and the `agent-medrag ask` command are implemented and validated.
 
 | Module | Status |
 |---|---|
 | `ingestion/` - JSON loader, document normalizer, PubMed client stub | Done |
 | `indexing/` - Chunker, BGE embeddings, Chroma store, index builder | Done |
 | `config.py` + `configs/default.yaml` - Centralized Stage 2 configuration | Done |
-| `cli.py` - `ingest`, `chunk`, and `build-index` subcommands | Done |
-| Retrieval from local Chroma index | Next |
-| Baseline `ask` command | Next |
+| `cli.py` - `ingest`, `chunk`, `build-index`, and `ask` subcommands | Done |
+| `rag_pipeline.py` - Config-driven retrieve -> answer orchestration | Done |
+| Retrieval from local Chroma index | Done |
+| DeepSeek LLM provider | Done |
+| Evidence-grounded answer generation with citations | Done |
+| Baseline medical safety note | Done |
 | Reranking (BGE) | Planned |
-| LLM generation with citations | Planned |
-| Medical safety guardrails | Planned |
+| Advanced medical safety guardrails | Planned |
 | RAGAS evaluation pipeline | Planned |
 | API / UI | Planned |
 
@@ -53,6 +55,7 @@ Agent_MedRag/
     __init__.py
     cli.py                # CLI entry point
     config.py             # Configuration loader
+    rag_pipeline.py       # Baseline RAG pipeline orchestration
     schemas.py            # Data models
     ingestion/
       __init__.py
@@ -65,8 +68,15 @@ Agent_MedRag/
       embeddings.py       # Sentence-transformers embedding backend
       vector_store.py     # Persistent Chroma collection wrapper
       index_builder.py    # Batch index construction from chunks
+    retrieval/
+      retriever.py        # Local Chroma retriever
+    generation/
+      llm_provider.py     # DeepSeek provider abstraction
+      prompts.py          # Evidence-grounded answer prompt
+      answer_generator.py # Structured answer generation
   scripts/
     ingested_pubmed.py    # Standalone ingestion script (stub)
+    test_rag_answer.py    # Stage 3 RAG pipeline smoke test
   notebooks/
     legacy/               # Original course project notebooks
     demos/                # Runnable demo notebooks
@@ -117,6 +127,16 @@ agent-medrag build-index --config configs/default.yaml --model BAAI/bge-large-en
 
 Generated Chroma indexes under `indexes/` are local build artifacts and are not committed to Git. Rebuild them with `agent-medrag build-index --config configs/default.yaml --rebuild`.
 
+### Ask A Question
+
+Set `DEEPSEEK_API_KEY` in your shell or environment before running the ask command.
+
+```bash
+agent-medrag ask "How does sonodynamic therapy differ from conventional antibiotics?" --config configs/default.yaml --top-k 3
+```
+
+This loads the configured Chroma index, retrieves evidence chunks, calls the configured DeepSeek model, and prints a structured `MedicalAnswer` JSON object containing `answer`, `confidence`, `citations`, `limitations`, `safety_note`, `retrieval_summary`, and metadata.
+
 ### Configuration
 
 Copy and edit the relevant config file:
@@ -125,7 +145,7 @@ Copy and edit the relevant config file:
 cp configs/default.yaml configs/local.yaml
 ```
 
-Stage 2 currently uses these sections from `configs/default.yaml`:
+The current baseline uses these sections from `configs/default.yaml`:
 
 | Section | Purpose |
 |---|---|
@@ -133,38 +153,52 @@ Stage 2 currently uses these sections from `configs/default.yaml`:
 | `chunking` | Chunk size, overlap, and minimum chunk length |
 | `embedding` | HuggingFace model, device, batch size, and normalization |
 | `vector_store` | Chroma persist directory and collection name |
+| `retrieval` | Default top-k retrieval setting |
+| `llm` | DeepSeek provider, model, temperature, token limit, and reasoning settings |
 
-## Next Stage: Baseline RAG Ask
+## Stage 3 Acceptance
 
-Stage 3 will turn the local Chroma index into a usable RAG question-answering path.
+Stage 3 turns the local Chroma index into a usable RAG question-answering path.
 
-Planned work:
-
-- Load the persisted Chroma collection.
-- Embed the user question with the same embedding backend used for indexing.
-- Retrieve top-k chunks from the local index.
-- Convert raw Chroma results into structured evidence records.
-- Add the first `agent-medrag ask` command.
-- Generate an answer grounded in retrieved evidence.
-
-Initial target command:
+Validated command:
 
 ```bash
-agent-medrag ask "How does sonodynamic therapy differ from conventional antibiotics?"
+agent-medrag ask "How does sonodynamic therapy differ from conventional antibiotics?" --config configs/default.yaml --top-k 3
+```
+
+Validation result:
+
+```text
+retrieval_summary.retrieved_count = 3
+retrieval_summary.used_evidence_count = 1
+citations[0].doc_id = pubmed_000008
+citations[0].chunk_id = pubmed_000008_chunk_000
+safety_note = This answer is for medical literature exploration and is not medical advice.
 ```
 
 Stage 3 acceptance criteria:
 
 - The system retrieves evidence from the local Chroma index.
 - Retrieved chunks include `chunk_id`, `doc_id`, title, text, and retrieval score.
-- The `ask` command returns a grounded answer or clearly reports insufficient evidence.
+- The `ask` command returns a grounded answer with citations.
+- The answer includes limitations and a medical safety note.
+
+See [docs/STAGE3_ACCEPTANCE.md](docs/STAGE3_ACCEPTANCE.md) for the full acceptance record.
+
+## Next Stage: Reranking, Citation Quality, and Safety
+
+Stage 4 will improve answer quality and safety beyond the fixed baseline chain:
+
+- Add reranking to improve evidence ordering.
+- Tighten citation quality checks.
+- Add stronger safety handling for personalized medical advice, dosage, medication changes, and emergency symptoms.
 
 ### Environment
 
 ```bash
 cp .env.example .env
 # Fill in API keys:
-#   OPENAI_API_KEY=...
+#   DEEPSEEK_API_KEY=...
 #   HF_TOKEN=...
 #   ENTREZ_EMAIL=...
 ```

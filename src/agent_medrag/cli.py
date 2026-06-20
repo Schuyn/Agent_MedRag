@@ -1,7 +1,7 @@
 '''
 Author: Chuyang Su cs4570@columbia.edu
 Date: 2026-05-15 15:40:31
-LastEditTime: 2026-05-29 15:44:41
+LastEditTime: 2026-06-19 21:24:17
 FilePath: /Agent_MedRag/src/agent_medrag/cli.py
 Description:
 CLI entry point for Agent_MedRag. Exposes subcommands for the data pipeline —
@@ -30,11 +30,12 @@ from agent_medrag.indexing.vector_store import (
 )
 from agent_medrag.indexing.index_builder import build_index,load_chunks_jsonl
 from agent_medrag.config import (
-    DAFAULT_CONFIG_PATH,
+    DEFAULT_CONFIG_PATH,
     get_config_value,
     load_config,
     resolve_device,
 )
+from agent_medrag.rag_pipeline import build_rag_pipeline
 from agent_medrag.schemas import MedicalDocument,MedicalChunk
 
 def write_documents_jsonl(
@@ -152,6 +153,22 @@ def run_build_index(
     print(f"Vector store contains {vector_store.count()} records")
     print(f"Index written to {persist_directory}")
 
+def run_ask(
+    question:str,
+    config_path:str | Path,
+    top_k:int | None,
+)->None:
+    pipeline=build_rag_pipeline(config_path)
+    answer=pipeline.ask(question,top_k=top_k)
+
+    print(
+        json.dumps(
+            answer.to_json_dict(),
+            indent='\t',
+            ensure_ascii=False,
+        )
+    )
+
 def build_parser()->argparse.ArgumentParser:
     """
     Create and return a configured ArgumentParser for the CLI.
@@ -164,7 +181,7 @@ def build_parser()->argparse.ArgumentParser:
         argparse.ArgumentParser: parser configured with the available subcommands.
     """
     parser=argparse.ArgumentParser(
-        prog='medrag',
+        prog='agent-medrag',
         description=(
             "Agent_MedRag: A medical retrieval-augmented generation agent. "
             "This CLI supports PubMed ingestion and document chunking."
@@ -181,7 +198,7 @@ def build_parser()->argparse.ArgumentParser:
     ingest_parser.add_argument(
         "--config",
         type=str,
-        default=DAFAULT_CONFIG_PATH,
+        default=DEFAULT_CONFIG_PATH,
         help="Path to the YAML config file.",
     )
     
@@ -207,7 +224,7 @@ def build_parser()->argparse.ArgumentParser:
     chunk_parser.add_argument(
         "--config",
         type=str,
-        default=DAFAULT_CONFIG_PATH,
+        default=DEFAULT_CONFIG_PATH,
         help="Path to the YAML config file.",
     )
     
@@ -247,7 +264,7 @@ def build_parser()->argparse.ArgumentParser:
     build_index_parser.add_argument(
         "--config",
         type=str,
-        default=None,
+        default=DEFAULT_CONFIG_PATH,
         help="Path to the YAML config file.",
     )
     
@@ -302,12 +319,46 @@ def build_parser()->argparse.ArgumentParser:
         help="Embedding device, for example cpu, cuda, or mps."
     )
 
+    ask_parser=subparsers.add_parser(
+        'ask',
+        help="Ask a medical literature question using the local RAG pipeline.",
+    )
+
+    ask_parser.add_argument(
+        'question',
+        type=str,
+        help="Question to answer:",
+    )
+
+    ask_parser.add_argument(
+        '--config',
+        type=str,
+        default=DEFAULT_CONFIG_PATH,
+        help="Path to the YAML config file.",
+    )
+
+    ask_parser.add_argument(
+        '--top-k',
+        type=int,
+        default=None,
+        help="Number of evidence chunks to retrieve.",
+    )
+
     return parser
 
 def main()->None:
     """Parse CLI arguments and dispatch to the matching subcommand handler."""
     parser=build_parser()
     args=parser.parse_args()
+
+    if args.command=='ask':
+        run_ask(
+            question=args.question,
+            config_path=args.config,
+            top_k=args.top_k,
+        )
+        return
+
     config=load_config(args.config)
     
     if args.command=='ingest':
@@ -408,6 +459,7 @@ def main()->None:
 
     else:
         print(f"Unknown command: {args.command}")
-        
+
+
 if __name__=='__main__':
     main()

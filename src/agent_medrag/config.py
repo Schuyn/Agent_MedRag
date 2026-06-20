@@ -14,9 +14,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-DAFAULT_CONFIG_PATH="configs/default.yaml"
+DEFAULT_CONFIG_PATH="configs/default.yaml"
 
-def load_config(config_path: str | Path=DAFAULT_CONFIG_PATH)->dict[str,Any]:
+def load_config(config_path: str | Path=DEFAULT_CONFIG_PATH)->dict[str,Any]:
     '''
     Load a YAML configuration file and return it as a dictionary.
     '''
